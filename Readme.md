@@ -1,4 +1,3 @@
-
 ### This Readme corresponds to the upcoming 1.0 release. Please refer to http://socket.io for the current 0.9.x documentation.
 
 <hr />
@@ -9,6 +8,9 @@
 
 ## How to use
 
+The following example attaches socket.io to a plain Node.JS
+HTTP server listening on port `3000`.
+
 ```js
 var server = require('http').Server();
 var io = require('socket.io')(server);
@@ -17,6 +19,14 @@ io.on('connection', function(socket){
   socket.on('disconnect', function(){});
 });
 server.listen(3000);
+```
+
+### Standalone
+
+```js
+var io = require('socket.io')();
+io.on('connection', function(socket){});
+io.listen(3000);
 ```
 
 ### In conjunction with `Express`
@@ -29,6 +39,19 @@ function.
 ```js
 var app = require('express')();
 var server = require('http').Server(app);
+var io = require('socket.io')(server);
+io.on('connection', function(){ // … });
+server.listen(3000);
+```
+
+### In conjunction with `Koa`
+
+Like Express.JS, Koa works by exposing an application as a request
+handler function, but only by calling the `callback` method.
+
+```js
+var app = require('koa')();
+var server = require('http').Server(app.callback());
 var io = require('socket.io')(server);
 io.on('connection', function(){ // … });
 server.listen(3000);
@@ -58,10 +81,13 @@ server.listen(3000);
 
   The following options are supported:
 
-  - `static` sets the value for Server#static()
+  - `serveClient` sets the value for Server#serveClient()
   - `path` sets the value for Server#path()
 
-  Options are always passed to the `engine.io` `Server` that gets created.
+  The same options passed to socket.io are always passed to
+  the `engine.io` `Server` that gets created. See engine.io
+  [options](https://github.com/learnboost/engine.io#methods-1)
+  as reference.
 
 ### Server(srv:http#Server, opts:Object)
 
@@ -72,7 +98,7 @@ server.listen(3000);
 
   Binds socket.io to a new `http.Server` that listens on `port`.
 
-### Server#static(v:Boolean):Server
+### Server#serveClient(v:Boolean):Server
 
   If `v` is `true` the attached server (see `Server#attach`) will serve
   the client files. Defaults to `true`.
@@ -80,12 +106,12 @@ server.listen(3000);
   This method has no effect after `attach` is called.
 
   ```js
-  // pass a server and the `static` option
-  var io = require('socket.io')(http, { static: false });
+  // pass a server and the `serveClient` option
+  var io = require('socket.io')(http, { serveClient: false });
 
   // or pass no server and then you can call the method
   var io = require('socket.io')();
-  io.static(false);
+  io.serveClient(false);
   io.attach(http);
   ```
 
@@ -119,6 +145,10 @@ server.listen(3000);
   Attaches the `Server` to an engine.io instance that is bound to `port`
   with the given `opts` (optionally).
 
+### Server#listen
+
+  Synonym of `Server#attach`.
+
 ### Server#bind(srv:engine#Server):Server
 
   Advanced use only. Binds the server to a specific engine.io `Server` 
@@ -142,12 +172,16 @@ server.listen(3000);
   equivalent:
 
   ```js
-  var io = require('socket.io');
+  var io = require('socket.io')();
   io.sockets.emit('an event sent to all connected clients');
   io.emit('an event sent to all connected clients');
   ```
 
   For other available methods, see `Namespace` below.
+
+### Server#use
+
+  See `Namespace#use` below.
 
 ### Namespace
 
@@ -172,14 +206,48 @@ server.listen(3000);
   Hash of `Socket` objects that are connected to this namespace indexed
   by `id`.
 
+### Namespace#use(fn:Function):Namespace
+
+  Registers a middleware, which is a function that gets executed for
+  every incoming `Socket` and receives as parameter the socket and a
+  function to optionally defer execution to the next registered
+  middleware.
+
+  ```
+  var io = require('socket.io')();
+  io.use(function(socket, next){
+    if (socket.request.headers.cookie) return next();
+    done(new Error('Authentication error'));
+  });
+  ```
+
+  Errors passed to middleware callbacks are sent as special `error`
+  packets to clients.
+
 ### Socket
 
   A `Socket` is the fundamental class for interacting with browser
-  clients.
+  clients. A `Socket` belongs to a certain `Namespace` (by default `/`)
+  and uses an underlying `Client` to communicate.
 
 ### Socket#rooms:Array
 
   A list of strings identifying the rooms this socket is in.
+
+### Socket#client:Client
+
+  A reference to the underlying `Client` object.
+
+### Socket#conn:Socket
+
+  A reference to the underyling `Client` transport connection (engine.io
+  `Socket` object).
+
+### Socket#request:Request
+
+  A getter proxy that returns the reference to the `request` that
+  originated the underlying engine.io `Client`. Useful for accessing
+  request headers such as `Cookie` or `User-Agent`.
 
 ### Client
 
@@ -187,10 +255,20 @@ server.listen(3000);
   connection. A `Client` can be associated with many multiplexed `Socket`
   that belong to different `Namespace`s.
 
+### Client#conn
+
+  A reference to the underlying `engine.io` `Socket` connection.
+
+### Client#request
+
+  A getter proxy that returns the reference to the `request` that
+  originated the engine.io connection. Useful for accessing
+  request headers such as `Cookie` or `User-Agent`.
+
 ### Adapter
 
   The `Adapter` is in charge of keeping track of what rooms each socket
-  is connected to, and passing messages to them.
+  is connected to and passing messages to them.
 
   By default the `Adapter` is memory based. In order to pass messages
   across multiple processes, make sure to use an appropriate adapter.

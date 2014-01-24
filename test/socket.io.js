@@ -20,6 +20,8 @@ function client(srv, nsp, opts){
 describe('socket.io', function(){
   describe('server attachment', function(){
     describe('http.Server', function(){
+      var clientVersion = require('socket.io-client/package').version;
+
       it('should serve static files', function(done){
         var srv = http();
         io(srv);
@@ -30,15 +32,29 @@ describe('socket.io', function(){
           if (err) return done(err);
           var ctype = res.headers['content-type'];
           expect(ctype).to.be('application/javascript');
+          expect(res.headers.etag).to.be(clientVersion);
           expect(res.text).to.match(/engine\.io/);
           expect(res.status).to.be(200);
           done();
         });
       });
 
+      it('should handle 304', function(done){
+        var srv = http();
+        io(srv);
+        request(srv)
+        .get('/socket.io/socket.io.js')
+        .set('ETag', clientVersion)
+        .end(function(err, res){
+          if (err) return done(err);
+          expect(res.statusCode).to.be(304);
+          done();
+        });
+      });
+
       it('should not serve static files', function(done){
         var srv = http();
-        io(srv, { static: false });
+        io(srv, { serveClient: false });
         request(srv)
         .get('/socket.io/socket.io.js')
         .expect(400, done);
@@ -68,6 +84,20 @@ describe('socket.io', function(){
         .get('/socket.io/socket.io.js')
         .expect(200, done);
       });
+
+      it('with listen', function(done){
+        var sockets = io().listen(54011);
+        request('http://localhost:54011')
+        .get('/socket.io/socket.io.js')
+        .expect(200, done);
+      });
+
+      it('as a string', function(done){
+        var sockets = io().listen('54012');
+        request('http://localhost:54012')
+        .get('/socket.io/socket.io.js')
+        .expect(200, done);
+      });
     });
   });
 
@@ -85,7 +115,7 @@ describe('socket.io', function(){
         var sio = io();
         expect(sio.use).to.be.a('function');
         expect(sio.to).to.be.a('function');
-        expect(sio.in).to.be.a('function');
+        expect(sio['in']).to.be.a('function');
         expect(sio.emit).to.be.a('function');
         expect(sio.send).to.be.a('function');
         expect(sio.write).to.be.a('function');
@@ -337,6 +367,44 @@ describe('socket.io', function(){
           s.emit('hi', 1, 2, function(){
             done();
           });
+        });
+      });
+    });
+
+    it('should have access to the client', function(done){
+      var srv = http();
+      var sio = io(srv);
+      srv.listen(function(){
+        var socket = client(srv);
+        sio.on('connection', function(s){
+          expect(s.client).to.be.an('object');
+          done();
+        });
+      });
+    });
+
+    it('should have access to the connection', function(done){
+      var srv = http();
+      var sio = io(srv);
+      srv.listen(function(){
+        var socket = client(srv);
+        sio.on('connection', function(s){
+          expect(s.client.conn).to.be.an('object');
+          expect(s.conn).to.be.an('object');
+          done();
+        });
+      });
+    });
+
+    it('should have access to the request', function(done){
+      var srv = http();
+      var sio = io(srv);
+      srv.listen(function(){
+        var socket = client(srv);
+        sio.on('connection', function(s){
+          expect(s.client.request.headers).to.be.an('object');
+          expect(s.request.headers).to.be.an('object');
+          done();
         });
       });
     });
